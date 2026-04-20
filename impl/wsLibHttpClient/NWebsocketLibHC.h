@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <httpClient/httpClient.h>
 #include <memory>
 #include <nakama-cpp/NPlatformParams.h>
@@ -36,10 +37,12 @@ public:
   void disconnect() override;
 
   bool send(const NBytes& data) override;
-  bool isConnecting() const override { return false; };
+  bool isConnecting() const override;
 
 private:
   explicit NWebsocketLibHC(XTaskQueueHandle q);
+
+  enum class State { Disconnected, Connecting, Connected };
   //        void submit_cb(const NHttpResponseCallback &cb, int statusCode, std::string body, std::string err = "")
   //        noexcept; HRESULT NWebsocketLibHC::prep_hc_call(const NHttpRequest& req, std::unique_ptr<HC_CALL,
   //        decltype(&HCHttpCallCloseHandle)>& call);
@@ -50,6 +53,7 @@ private:
   bool m_is_binary;
   uint32_t _activityTimeoutMs = 0;
   uint64_t _lastReceivedMessageTimeMs;
+  std::atomic<State> _state{State::Disconnected};
 
   static void __stdcall ws_on_text_msg(HCWebsocketHandle ws, const char* str, void* self);
   static void __stdcall ws_on_binary_msg(HCWebsocketHandle ws, const uint8_t* bytes, uint32_t size, void* self);

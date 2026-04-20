@@ -193,6 +193,7 @@ void NWebsocketLibHC::connect(const std::string& url, NRtTransportType type) {
     HCWebSocketSetMaxReceiveBufferSize(ws, 1024 * 1024);
 #endif
     m_ws.reset(ws);
+    _state.store(State::Connecting, std::memory_order_relaxed);
   }
 
   auto* asyncBlock = new XAsyncBlock{};
@@ -211,8 +212,10 @@ void NWebsocketLibHC::connect(const std::string& url, NRtTransportType type) {
       if (self->m_ws /*&& self->m_ws.get() == result.websocket*/) {
         if (SUCCEEDED(result.errorCode)) {
           self->_lastReceivedMessageTimeMs = getUnixTimestampMs();
+          self->_state.store(State::Connected, std::memory_order_relaxed);
           self->fireOnConnected();
         } else {
+          self->_state.store(State::Disconnected, std::memory_order_relaxed);
           self->fireOnError("Websocket connection error");
         }
       } else {
@@ -223,6 +226,7 @@ void NWebsocketLibHC::connect(const std::string& url, NRtTransportType type) {
             "User requested disconnect, while connection was in progress. Ignoring connection result.");
       }
     } else {
+      self->_state.store(State::Disconnected, std::memory_order_relaxed);
       self->fireOnError("Websocket connection error: HCGetWebsocketConnectResult failed");
     }
   };
@@ -238,8 +242,11 @@ void NWebsocketLibHC::disconnect() {
     m_ws.reset(nullptr);
 
     _connected = false; // white lie, we didn't receive close confirmation from server yet
+    _state.store(State::Disconnected, std::memory_order_relaxed);
   }
 }
+
+bool NWebsocketLibHC::isConnecting() const { return _state.load(std::memory_order_relaxed) == State::Connecting; }
 
 void NWebsocketLibHC::setActivityTimeout(uint32_t timeoutMs) { _activityTimeoutMs = timeoutMs; }
 
@@ -331,6 +338,7 @@ void __stdcall NWebsocketLibHC::ws_on_close(HCWebsocketHandle ws, HCWebSocketClo
       // Here we check that notification is for the "active" socket, not a previously closed one to avoid race
       if (self->m_ws && self->m_ws.get() == ws) {
         self->m_ws.reset(nullptr);
+        self->_state.store(State::Disconnected, std::memory_order_relaxed);
         NRtClientDisconnectInfo info;
         info.code = code;
         info.remote = true;
