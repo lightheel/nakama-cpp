@@ -37,4 +37,14 @@
          PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
  )
 
+ if (RTTI)
+     if (NOT MSVC)
+         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/NLogSinkInterface.cpp"
+             PROPERTIES COMPILE_OPTIONS "-frtti")
+     else()
+         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/NLogSinkInterface.cpp"
+             PROPERTIES COMPILE_OPTIONS "/GR")
+     endif()
+ endif()
+
 
